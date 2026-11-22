@@ -28,12 +28,15 @@ function showFallback(): void {
 
 let contextLost = false;
 let imagePromise: Promise<HTMLImageElement> | null = null;
+// setup() の世代番号。ロストや再実行で増やし、古い setup() を無効化する
+let generation = 0;
 
 async function start(): Promise<void> {
   // コンテキストロスト中は静止画(CSS 背景)を見せ、復帰したら WebGL に戻す
   canvas.addEventListener('webglcontextlost', (e) => {
     e.preventDefault();
     contextLost = true;
+    generation++; // 進行中の setup() を無効化する
     stopLoop?.();
     showFallback();
   });
@@ -53,6 +56,7 @@ let redraw: () => void = () => {};
 let onUpdate: () => void = () => {};
 
 async function setup(): Promise<void> {
+  const gen = ++generation;
   const gl = createContext(canvas);
   if (!gl) {
     showFallback();
@@ -67,8 +71,15 @@ async function setup(): Promise<void> {
   createFullscreenQuad(gl, program, 'aPos');
 
   imagePromise ??= loadImage(IMAGE_URL);
-  const image = await imagePromise;
-  if (contextLost || gl.isContextLost()) return;
+  let image: HTMLImageElement;
+  try {
+    image = await imagePromise;
+  } catch (err) {
+    imagePromise = null; // 次の復帰で再試行できるようにする
+    throw err;
+  }
+  // ロスト中・古い setup() は何も作らず終了する(復帰時に改めて setup() が走る)
+  if (gen !== generation || contextLost || gl.isContextLost()) return;
   const tex = createTexture(gl, image);
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, tex.texture);
@@ -167,6 +178,7 @@ async function setup(): Promise<void> {
     document.addEventListener('visibilitychange', () => onUpdate());
     motionQuery.addEventListener('change', () => onUpdate());
   }
+  stopLoop?.(); // 前のループが残っていれば必ず止めてから新しいループに切り替える
   stopLoop = () => {
     if (rafId) cancelAnimationFrame(rafId);
     rafId = 0;
