@@ -63,11 +63,12 @@ void main() {
   float glow = 0.0;
   for (int i = 0; i < ${STARS.length}; i++) {
     vec2 d = vec2(vUv.x - uStar[i].x, (vUv.y - uStar[i].y) / uAspect);
-    float s = clamp(length(d) / uStar[i].z, 0.0, 1.0);
-    float w = (1.0 - s * s) * (1.0 - s * s);
+    float s2 = dot(d, d) / (uStar[i].z * uStar[i].z); // 正規化距離の二乗
+    if (s2 >= 1.0) continue;
+    float w = (1.0 - s2) * (1.0 - s2);
     glow += w * uStar[i].w;
   }
-  c = min(c * (1.0 + glow), vec3(1.0));
+  c = min(c * (1.0 + glow * m), vec3(1.0)); // マスク 0 では明るさを変えない
   if (uDebugMask > 0.5) {
     c = mix(c, vec3(m), 0.85);
   }

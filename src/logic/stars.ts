@@ -45,8 +45,13 @@ export function brightness(star: Star, t: number): number {
 
 /** uniform 用: (cx, cy, radius, 倍率 - 1) の並び */
 export function packStarGlow(t: number, out = new Float32Array(STARS.length * 4)): Float32Array {
-  STARS.forEach((s, i) => {
-    out.set([s.center.x, s.center.y, s.radius, brightness(s, t) - 1], i * 4);
-  });
+  for (let i = 0; i < STARS.length; i++) {
+    const s = STARS[i];
+    const o = i * 4;
+    out[o] = s.center.x;
+    out[o + 1] = s.center.y;
+    out[o + 2] = s.radius;
+    out[o + 3] = brightness(s, t) - 1;
+  }
   return out;
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { PULSE_AMPLITUDE, STARS, brightness } from '../src/logic/stars';
+import { HALOS } from '../src/logic/flow';
+import { PULSE_AMPLITUDE, STARS, brightness, packStarGlow } from '../src/logic/stars';
 
 describe('stars', () => {
   it('月 + 星 11 個', () => {
@@ -22,6 +23,25 @@ describe('stars', () => {
       expect(s.period).toBeGreaterThanOrEqual(4);
       expect(s.period).toBeLessThanOrEqual(8);
     }
-    expect(new Set(STARS.map((s) => s.period)).size).toBeGreaterThan(6);
+    expect(new Set(STARS.map((s) => s.period)).size).toBe(STARS.length);
+  });
+  it('packStarGlow は長さ STARS.length*4 で、値が brightness - 1 と一致する', () => {
+    const t = 3.7;
+    const out = packStarGlow(t);
+    expect(out.length).toBe(STARS.length * 4);
+    STARS.forEach((s, i) => {
+      expect(out[i * 4]).toBeCloseTo(s.center.x, 6);
+      expect(out[i * 4 + 1]).toBeCloseTo(s.center.y, 6);
+      expect(out[i * 4 + 2]).toBeCloseTo(s.radius, 6);
+      expect(out[i * 4 + 3]).toBeCloseTo(brightness(s, t) - 1, 6);
+    });
+  });
+  it('flow.ts の HALOS は STARS と位置・半径・向きが一致する', () => {
+    expect(HALOS.length).toBe(STARS.length);
+    STARS.forEach((s, i) => {
+      expect(HALOS[i].center).toEqual(s.center);
+      expect(HALOS[i].radius).toBe(s.radius);
+      expect(HALOS[i].dir).toBe(s.dir);
+    });
   });
 });

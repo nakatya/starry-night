@@ -64,9 +64,10 @@ async function start(): Promise<void> {
   gl.uniform4fv(u('uVortex[0]'), packVortices(VORTICES));
   gl.uniform4fv(u('uHalo[0]'), packVortices(HALOS));
   const starLoc = u('uStar[0]');
+  // 静止時(reduced-motion を含む)は明るさの増減だけ 0 にして、元の絵のままにする。半径は 0 除算を避けるため残す
   const starBuf = new Float32Array(STARS.length * 4);
   packStarGlow(0, starBuf);
-  for (let i = 3; i < starBuf.length; i += 4) starBuf[i] = 0; // 静止時は明るさを変えない
+  for (let i = 3; i < starBuf.length; i += 4) starBuf[i] = 0;
   gl.uniform4fv(starLoc, starBuf);
   const phaseLoc = u('uPhase');
   const uvLoc = gl.getUniformLocation(program, 'uUvRect');
