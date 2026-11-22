@@ -1,0 +1,132 @@
+# Claude による実装ワークフロー
+#  - Issue に `approved` ラベルを付ける → Claude が実装して PR を作る(ストッパー①: 人が承認するまで実装しない)
+#  - Issue / PR のコメントで @claude と書く → その指示に対応する
+#  - オーケストレーター(orchestrator.yml)から直接呼ばれる → 実装(implement)/ PR の修正(fix)
+# 人の操作はリポジトリのオーナー / 書き込み権限のある人からしか受け付けない。
+name: Claude
+
+on:
+  issues:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "implement または fix"
+        required: true
+        type: choice
+        options: [implement, fix]
+      issue:
+        description: "implement: 実装する Issue 番号"
+        required: false
+        type: string
+      pr:
+        description: "fix: 直す PR 番号"
+        required: false
+        type: string
+      branch:
+        description: "fix: PR のブランチ名"
+        required: false
+        type: string
+      instructions:
+        description: "fix: 直してほしい内容"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+  actions: read
+
+concurrency:
+  group: claude-${{ github.event.issue.number || github.event.pull_request.number || inputs.issue || inputs.pr }}
+  cancel-in-progress: false
+
+jobs:
+  implement:
+    if: >
+      (github.event_name == 'issues' &&
+       github.event.label.name == 'approved' &&
+       github.event.sender.login == github.repository_owner) ||
+      (github.event_name == 'workflow_dispatch' && inputs.mode == 'implement')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ISSUE: ${{ github.event.issue.number || inputs.issue }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # オーケストレーター(github-actions)からの呼び出しを受け付ける
+          allowed_bots: "github-actions,github-actions[bot]"
+          prompt: |
+            リポジトリ ${{ github.repository }} の Issue #${{ env.ISSUE }} を実装してください。
+            CLAUDE.md と docs/DESIGN.md に従うこと。
+            - ブランチ claude/issue-${{ env.ISSUE }}-<短い説明> を作る
+            - 受け入れ条件をすべて満たし、npm run typecheck && npm test && npm run build を通す
+            - Closes #${{ env.ISSUE }} を含む PR を作る
+            - CLAUDE.md の「止まって人に聞くべきこと」に当たる場合は、実装せずに Issue に質問を書き、needs-human ラベルを付けて終了する
+          claude_args: |
+            --max-turns 60
+            --allowedTools "Edit,Write,Read,Glob,Grep,Bash(npm:*),Bash(npx:*),Bash(git:*),Bash(gh pr:*),Bash(gh issue:*),Bash(curl:*),Bash(file:*),Bash(identify:*),Bash(convert:*),Bash(python3:*)"
+
+  fix:
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'fix'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.branch }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          allowed_bots: "github-actions,github-actions[bot]"
+          prompt: |
+            リポジトリ ${{ github.repository }} の PR #${{ inputs.pr }}(ブランチ ${{ inputs.branch }})に、次の修正を加えてください。
+            CLAUDE.md と docs/DESIGN.md に従うこと。
+
+            ${{ inputs.instructions }}
+
+            - 今チェックアウトしているブランチ ${{ inputs.branch }} にコミットして push する(新しいブランチや PR は作らない)
+            - npm run typecheck && npm test && npm run build を通す
+            - 終わったら PR に、何を直したかを短くコメントする
+          claude_args: |
+            --max-turns 50
+            --allowedTools "Edit,Write,Read,Glob,Grep,Bash(npm:*),Bash(npx:*),Bash(git:*),Bash(gh pr:*),Bash(gh run:*)"
+
+  respond:
+    if: >
+      (github.event_name == 'issue_comment' || github.event_name == 'pull_request_review_comment') &&
+      contains(github.event.comment.body, '@claude') &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: |
+            --max-turns 40
+            --allowedTools "Edit,Write,Read,Glob,Grep,Bash(npm:*),Bash(npx:*),Bash(git:*),Bash(gh pr:*),Bash(gh issue:*)"

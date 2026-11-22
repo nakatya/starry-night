@@ -1,0 +1,85 @@
+# 自動進行(オーケストレーター)
+# site ラベルの open な Issue を番号順に1本ずつ進める:
+#   承認 → Claude が実装して PR → CI とレビュー → Claude が判断 → 承認してマージ / 修正を依頼 / 人を呼ぶ
+# 止める方法:
+#   - 一時停止: Settings → Secrets and variables → Actions → Variables で AUTOPILOT を off にする
+#   - 完全停止: Actions タブ → Autopilot → 「Disable workflow」
+#   - 特定の Issue を飛ばす: hold ラベルを付ける
+# needs-human ラベルの付いた Issue があるあいだは、何も進めない。
+name: Autopilot
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_run:
+    workflows: [CI, Claude Review, Claude]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+  checks: read
+  id-token: write
+
+concurrency:
+  group: autopilot
+  cancel-in-progress: false
+
+jobs:
+  step:
+    if: vars.AUTOPILOT != 'off'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+      - id: state
+        run: scripts/autopilot/state.sh
+
+      - name: 判断の材料を集める
+        if: steps.state.outputs.state == 'judge'
+        run: scripts/autopilot/context.sh "${{ steps.state.outputs.pr }}" "${{ steps.state.outputs.issue }}"
+
+      - name: Claude が判断する
+        if: steps.state.outputs.state == 'judge'
+        uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          allowed_bots: "claude,claude[bot],github-actions,github-actions[bot]"
+          prompt: |
+            あなたはこのリポジトリの自動進行の判断役です。このリポジトリは、ゴッホ「星月夜」を画面いっぱいに表示し、空のうねりをアニメーションさせる背景サイトです。PR #${{ steps.state.outputs.pr }}(Issue #${{ steps.state.outputs.issue }})は CI が成功し、レビューも終わっています。
+            .autopilot/context.md(Issue・PR・変更ファイル・レビューの指摘・自動修正の回数・自動で作った Issue の一覧)と、CLAUDE.md、docs/DESIGN.md を読み、次のどれかに決めてください。
+
+            - merge: 受け入れ条件を満たし、致命的な指摘(バグ・受け入れ条件の未達・仕様と違う挙動)がない
+            - fix: 致命的な指摘があり、この PR の範囲で直せる。直す内容を具体的に instructions に書く
+            - human: 見た目の好みや仕様そのものなど、人にしか決められない判断が要る。または docs/DESIGN.md の変更が必要
+
+            merge と決めたうえで「後で直すべき指摘」がある場合は、次のルールで Issue を作ってください。
+            - 価値のある改善(見た目の再現度・動きの自然さ・表示速度・端末対応など)は、関連するものを束ねて Issue にする。1回で最大2本
+            - 命名や定数の重複などの些末な指摘は、既存の「後片付け」Issue があればそこにコメントで追記し、なければ「後片付け」Issue を1本作る
+            - 作成は `gh issue create --label site --label auto --title ... --body ...`。本文に元の PR 番号と受け入れ条件を書く
+            - 一覧にある Issue と同じ内容のものは作らない
+            - auto の Issue が通算 8 本に達していたら作らず、reason にその旨を書く
+            - docs/DESIGN.md を変える必要がある Issue には、site ではなく hold ラベルを付ける
+
+            最後に、結果を .autopilot/decision.json に次の形で書いてください(これ以外のファイルは変更しない)。
+            {"action": "merge|fix|human", "reason": "日本語で1〜2文", "instructions": "fix のときだけ。直す内容", "created_issues": [番号]}
+          claude_args: |
+            --max-turns 30
+            --allowedTools "Read,Glob,Grep,Write,Bash(gh issue create:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh pr view:*),Bash(gh pr diff:*)"
+
+      - name: 実行する
+        # 判断のステップが失敗しても実行し、判断結果がなければ人を呼ぶ
+        if: ${{ !cancelled() && (steps.state.outputs.state == 'judge' || steps.state.outputs.state == 'cifail') }}
+        run: >
+          scripts/autopilot/act.sh "${{ steps.state.outputs.state }}"
+          "${{ steps.state.outputs.pr }}" "${{ steps.state.outputs.issue }}"
+          "${{ steps.state.outputs.branch }}" "${{ steps.state.outputs.sha }}"

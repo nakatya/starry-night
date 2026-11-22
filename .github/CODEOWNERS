@@ -1,0 +1,6 @@
+# ここに挙げたファイルの変更は、必ずオーナーのレビューが必要(ブランチ保護で「Require review from Code Owners」をオン)
+/.github/        @nakatya
+/CLAUDE.md       @nakatya
+/docs/DESIGN.md  @nakatya
+/package.json    @nakatya
+/scripts/        @nakatya
