@@ -86,28 +86,53 @@ async function start(): Promise<void> {
     g.drawArrays(g.TRIANGLE_STRIP, 0, 4);
   };
 
-  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
   let phase = 0;
   let last = 0;
   let time = 0;
+  let rafId = 0;
   const frame = (now: number): void => {
-    if (!document.hidden) {
-      // 非表示から戻ったときに飛ばないよう、1フレームの進みに上限を設ける
-      const dt = last ? Math.min((now - last) / 1000, 0.1) : 0;
-      time += dt * speed;
-      phase = (phase + (dt * speed) / PERIOD_SECONDS) % 1;
-      gl.uniform1f(phaseLoc, phase);
-      gl.uniform4fv(starLoc, packStarGlow(time, starBuf));
-      draw(gl);
+    rafId = 0;
+    if (document.hidden || motionQuery.matches) {
+      last = 0;
+      return;
     }
-    last = document.hidden ? 0 : now;
-    requestAnimationFrame(frame);
+    // 非表示から戻った直後や時間が飛んだときに跳ねないよう、進みに上限を設ける
+    const dt = last ? Math.min((now - last) / 1000, 0.1) : 0;
+    last = now;
+    time += dt * speed;
+    phase = (phase + (dt * speed) / PERIOD_SECONDS) % 1;
+    gl.uniform1f(phaseLoc, phase);
+    gl.uniform4fv(starLoc, packStarGlow(time, starBuf));
+    draw(gl);
+    rafId = requestAnimationFrame(frame);
+  };
+  const stillFrame = (): void => {
+    // 静止した絵(動き 0、光輪の増減 0)
+    gl.uniform1f(phaseLoc, 0);
+    packStarGlow(0, starBuf);
+    for (let i = 3; i < starBuf.length; i += 4) starBuf[i] = 0;
+    gl.uniform4fv(starLoc, starBuf);
+    draw(gl);
+  };
+  const update = (): void => {
+    if (motionQuery.matches) {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = 0;
+      last = 0;
+      stillFrame();
+    } else if (!document.hidden && !rafId) {
+      last = 0;
+      rafId = requestAnimationFrame(frame);
+    }
   };
   gl.uniform1f(phaseLoc, 0);
   draw(gl);
   window.addEventListener('resize', () => draw(gl));
   window.addEventListener('orientationchange', () => draw(gl));
-  if (!reduced) requestAnimationFrame(frame);
+  document.addEventListener('visibilitychange', update);
+  motionQuery.addEventListener('change', update);
+  update();
   canvas.classList.add('ready');
 }
 
