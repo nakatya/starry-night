@@ -27,6 +27,24 @@ describe('buildMask', () => {
     expect(m[Math.floor(h * 0.6) * w + Math.floor(w * 0.15)]).toBe(0);
     expect(m.some((v) => v > 0 && v < 255)).toBe(true);
   });
+  it('blurRadius=0 なら全画素が maskAt*255 と一致する', () => {
+    const w = 64;
+    const h = 48;
+    const m = buildMask(w, h, 0);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        expect(m[y * w + x], `(${x},${y})`).toBe(maskAt((x + 0.5) / w, (y + 0.5) / h) * 255);
+      }
+    }
+  });
+  it('尖塔の先端付近はぼかし後も十分暗い', () => {
+    // main.ts の実サイズ(MASK_W×MASK_H)・既定の blurRadius
+    const w = 768;
+    const h = 608;
+    const m = buildMask(w, h);
+    const v = m[Math.round(0.64 * h) * w + Math.round(0.565 * w)];
+    expect(v).toBeLessThan(32);
+  });
   it('boxBlur は一様な値を保つ', () => {
     const out = boxBlur(new Uint8Array(25).fill(255), 5, 5, 2);
     expect([...out].every((v) => v === 255)).toBe(true);
