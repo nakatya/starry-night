@@ -2,15 +2,19 @@ import { coverUvRect } from './logic/cover';
 import {
   createContext,
   createFullscreenQuad,
+  createMaskTexture,
   createProgram,
   createTexture,
   loadImage,
   type GL,
 } from './gl/gl';
+import { buildMask } from './logic/mask';
 import { FRAGMENT_SHADER, VERTEX_SHADER } from './shaders/quad';
 
 const IMAGE_URL = `${import.meta.env.BASE_URL}starry-night.jpg`;
 const MAX_DPR = 2;
+const MASK_W = 768;
+const MASK_H = 608;
 
 const canvas = document.getElementById('stage') as HTMLCanvasElement;
 
@@ -39,6 +43,14 @@ async function start(): Promise<void> {
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, tex.texture);
   gl.uniform1i(gl.getUniformLocation(program, 'uImage'), 0);
+  // マスクは起動時に一度だけ作る
+  const maskTex = createMaskTexture(gl, buildMask(MASK_W, MASK_H), MASK_W, MASK_H);
+  gl.activeTexture(gl.TEXTURE1);
+  gl.bindTexture(gl.TEXTURE_2D, maskTex);
+  gl.uniform1i(gl.getUniformLocation(program, 'uMask'), 1);
+  const debugMask = new URLSearchParams(location.search).get('debug') === 'mask';
+  gl.uniform1f(gl.getUniformLocation(program, 'uDebugMask'), debugMask ? 1 : 0);
+  gl.activeTexture(gl.TEXTURE0);
   const uvLoc = gl.getUniformLocation(program, 'uUvRect');
 
   const draw = (g: GL): void => {
