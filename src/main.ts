@@ -1,4 +1,4 @@
-import { coverUvRect } from './logic/cover';
+import { coverBackgroundPosition, coverUvRect } from './logic/cover';
 import {
   createContext,
   createFullscreenQuad,
@@ -20,10 +20,37 @@ const MASK_H = 608;
 
 const canvas = document.getElementById('stage') as HTMLCanvasElement;
 
+let fallbackActive = false;
+let fallbackImage: HTMLImageElement | null = null;
+let fallbackResizeBound = false;
+
+function updateFallbackPosition(): void {
+  if (!fallbackActive || !fallbackImage) return;
+  // WebGL 経路(coverUvRect)と同じ構図になるよう background-position を計算する
+  const p = coverBackgroundPosition(
+    { width: canvas.clientWidth || 1, height: canvas.clientHeight || 1 },
+    { width: fallbackImage.naturalWidth, height: fallbackImage.naturalHeight },
+  );
+  canvas.style.backgroundPosition = `${p.x}% ${p.y}%`;
+}
+
 function showFallback(): void {
-  // WebGL が使えないときは CSS の背景画像(cover)で表示する
-  canvas.style.backgroundImage = `url(${IMAGE_URL})`;
-  canvas.classList.add('ready');
+  // WebGL が使えないときは CSS の背景画像(cover)で表示する。画像が読み込めてからフェードインする
+  fallbackActive = true;
+  if (!fallbackResizeBound) {
+    fallbackResizeBound = true;
+    window.addEventListener('resize', updateFallbackPosition);
+    window.addEventListener('orientationchange', updateFallbackPosition);
+  }
+  loadImage(IMAGE_URL)
+    .then((img) => {
+      if (!fallbackActive) return; // WebGL に復帰済み
+      fallbackImage = img;
+      canvas.style.backgroundImage = `url(${IMAGE_URL})`;
+      updateFallbackPosition();
+      canvas.classList.add('ready');
+    })
+    .catch((err) => console.error(err));
 }
 
 let contextLost = false;
@@ -184,6 +211,7 @@ async function setup(): Promise<void> {
     rafId = 0;
   };
   update();
+  fallbackActive = false;
   canvas.style.backgroundImage = '';
   canvas.classList.add('ready');
 }

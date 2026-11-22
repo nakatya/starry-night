@@ -1,5 +1,28 @@
 import { describe, expect, it } from 'vitest';
-import { coverUvRect } from '../src/logic/cover';
+import { coverBackgroundPosition, coverUvRect } from '../src/logic/cover';
+
+describe('coverBackgroundPosition', () => {
+  const imageSize = { width: 2560, height: 2027 };
+  const check = (s: { width: number; height: number }) => {
+    const p = coverBackgroundPosition(s, imageSize);
+    const r = coverUvRect(s, imageSize);
+    const w = r.u1 - r.u0;
+    const h = r.v1 - r.v0;
+    // CSS の位置から逆算した表示開始位置が coverUvRect と一致する
+    return { p, u0: (p.x / 100) * (1 - w), v0: (p.y / 100) * (1 - h), r };
+  };
+  it('縦長でも coverUvRect と同じ範囲になる', () => {
+    const { u0, v0, r } = check({ width: 390, height: 844 });
+    expect(u0).toBeCloseTo(r.u0, 9);
+    expect(v0).toBeCloseTo(r.v0, 9);
+  });
+  it('横長でも coverUvRect と同じ範囲になる', () => {
+    const { u0, v0, r, p } = check({ width: 2560, height: 800 });
+    expect(u0).toBeCloseTo(r.u0, 9);
+    expect(v0).toBeCloseTo(r.v0, 9);
+    expect(p.x).toBe(0);
+  });
+});
 
 const image = { width: 2560, height: 2027 };
 
