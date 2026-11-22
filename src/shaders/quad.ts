@@ -13,7 +13,14 @@ export const FRAGMENT_SHADER = `
 precision mediump float;
 varying vec2 vUv;
 uniform sampler2D uImage;
+uniform sampler2D uMask;
+uniform float uDebugMask; // 1 のときマスクを白黒で重ねる
 void main() {
-  gl_FragColor = vec4(texture2D(uImage, vUv).rgb, 1.0);
+  vec3 c = texture2D(uImage, vUv).rgb;
+  if (uDebugMask > 0.5) {
+    float m = texture2D(uMask, vUv).r;
+    c = mix(c, vec3(m), 0.85);
+  }
+  gl_FragColor = vec4(c, 1.0);
 }
 `;
