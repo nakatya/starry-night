@@ -13,8 +13,8 @@ export const IMAGE_ASPECT = 1920 / 1520;
 /** 1周期(秒) */
 export const PERIOD_SECONDS = 8;
 
-/** 最大のずれ(絵の幅に対する割合) */
-export const MAX_DISPLACEMENT = 0.006;
+/** 最大のずれ(絵の幅に対する割合)。0.6% では画素が数 px 行き来するだけで動きに見えなかったため 3% にした */
+export const MAX_DISPLACEMENT = 0.03;
 
 export interface Vortex {
   center: Point;
@@ -28,12 +28,12 @@ export interface Vortex {
 
 /** 空の渦。中央の大きな渦と、その右下の小さな渦(どちらも筆は時計回りに巻く) */
 export const VORTICES: readonly Vortex[] = [
-  { center: { x: 0.51, y: 0.37 }, radius: 0.15, strength: 0.0045, dir: 1 },
-  { center: { x: 0.67, y: 0.48 }, radius: 0.085, strength: 0.0035, dir: 1 },
+  { center: { x: 0.51, y: 0.37 }, radius: 0.15, strength: 0.025, dir: 1 },
+  { center: { x: 0.67, y: 0.48 }, radius: 0.085, strength: 0.018, dir: 1 },
 ];
 
 /** 空全体の流れ: 中央を左から右へ横切る波の帯 */
-export const BAND = { centerV: 0.42, halfWidth: 0.16, strength: 0.0015 };
+export const BAND = { centerV: 0.42, halfWidth: 0.16, strength: 0.008 };
 
 /** 月と星(光輪)のまわりのごく弱い回転。位置は stars.ts と共通 */
 export const HALOS: readonly Vortex[] = STARS.map((st) => ({

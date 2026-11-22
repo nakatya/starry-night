@@ -40,6 +40,26 @@ export function coverUvRect(screen: Size, image: Size, focus: Point = FOCUS): Uv
 }
 
 /**
+ * object-fit: contain と同じ考え方で、絵の全体が画面に収まる UV の範囲を返す。
+ * 絵は画面の中央に置く。余る側の範囲は 0〜1 の外にはみ出す(そこは背景として描く)。
+ */
+export function containUvRect(screen: Size, image: Size): UvRect {
+  const screenAspect = screen.width / screen.height;
+  const imageAspect = image.width / image.height;
+  let w = 1;
+  let h = 1;
+  if (screenAspect > imageAspect) {
+    // 画面のほうが横長: 縦は全部、左右に余白
+    w = screenAspect / imageAspect;
+  } else {
+    h = imageAspect / screenAspect;
+  }
+  const u0 = 0.5 - w / 2;
+  const v0 = 0.5 - h / 2;
+  return { u0, v0, u1: u0 + w, v1: v0 + h };
+}
+
+/**
  * coverUvRect と同じ表示範囲になる CSS の background-position(%)を返す。
  * CSS の p% は「はみ出し量 × p」だけ左上へずらすので、p = 開始位置 / (1 - 表示幅) になる。
  * はみ出しがない軸は位置が効かないので 0 を返す。

@@ -1,4 +1,4 @@
-import { coverBackgroundPosition, coverUvRect } from './logic/cover';
+import { containUvRect, coverUvRect } from './logic/cover';
 import {
   createContext,
   createFullscreenQuad,
@@ -18,12 +18,30 @@ const MAX_DPR = 2;
 const MASK_W = 768;
 const MASK_H = 608;
 const MAX_SPEED = 10;
+const MAX_AMP = 3;
 
 /** 静止状態の星バッファ(明るさの増減だけ 0 にして元の絵のまま。半径は 0 除算を避けるため残す) */
 function packStillStars(out: Float32Array<ArrayBuffer>): Float32Array<ArrayBuffer> {
   packStarGlow(0, out);
   for (let i = 3; i < out.length; i += 4) out[i] = 0;
   return out;
+}
+
+/** 余白用に、絵を長辺 48px ほどに縮めたテクスチャを作る */
+function createBlurTexture(gl: GL, image: HTMLImageElement): WebGLTexture {
+  const small = document.createElement('canvas');
+  small.width = 48;
+  small.height = Math.max(1, Math.round((48 * image.naturalHeight) / image.naturalWidth));
+  small.getContext('2d')?.drawImage(image, 0, 0, small.width, small.height);
+  const texture = gl.createTexture();
+  if (!texture) throw new Error('テクスチャを作れません');
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, small);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return texture;
 }
 
 const canvas = document.getElementById('stage') as HTMLCanvasElement;
@@ -35,12 +53,8 @@ let fallbackRetryBound = false;
 
 function updateFallbackPosition(): void {
   if (!fallbackActive || !fallbackImage) return;
-  // WebGL 経路(coverUvRect)と同じ構図になるよう background-position を計算する
-  const p = coverBackgroundPosition(
-    { width: canvas.clientWidth || 1, height: canvas.clientHeight || 1 },
-    { width: fallbackImage.naturalWidth, height: fallbackImage.naturalHeight },
-  );
-  canvas.style.backgroundPosition = `${p.x}% ${p.y}%`;
+  // WebGL 経路(containUvRect)と同じく、絵の全体を画面の中央に収める
+  canvas.style.backgroundPosition = 'center';
 }
 
 function showFallback(): void {
@@ -142,15 +156,23 @@ async function setup(): Promise<void> {
   const params = new URLSearchParams(location.search);
   const debugMask = params.get('debug') === 'mask';
   gl.uniform1f(gl.getUniformLocation(program, 'uDebugMask'), debugMask ? 1 : 0);
-  // マスク作成時の bindTexture でユニット 0 が上書きされるため、絵のテクスチャを結び直す
+  // 余白用: 絵を小さく縮めたテクスチャ(引き伸ばすとぼける)
+  const blurTex = createBlurTexture(gl, image);
+  gl.activeTexture(gl.TEXTURE2);
+  gl.bindTexture(gl.TEXTURE_2D, blurTex);
+  gl.uniform1i(gl.getUniformLocation(program, 'uBlur'), 2);
+  // マスク・余白用テクスチャ作成時の bindTexture でユニット 0 が上書きされるため、絵のテクスチャを結び直す
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, tex.texture);
   const speedParam = Number(params.get('speed') ?? 1);
   const speed = Number.isFinite(speedParam) && speedParam >= 0 ? Math.min(speedParam, MAX_SPEED) : 1;
+  // ?amp= で動きの大きさの倍率を変えられる(確認用。既定 1)
+  const ampParam = Number(params.get('amp') ?? 1);
+  const amp = Number.isFinite(ampParam) && ampParam >= 0 ? Math.min(ampParam, MAX_AMP) : 1;
   const u = (name: string) => gl.getUniformLocation(program, name);
   gl.uniform1f(u('uAspect'), IMAGE_ASPECT);
-  gl.uniform4f(u('uBand'), BAND.centerV, BAND.halfWidth, BAND.strength, MAX_DISPLACEMENT);
-  gl.uniform4fv(u('uVortex[0]'), packVortices(VORTICES));
+  gl.uniform4f(u('uBand'), BAND.centerV, BAND.halfWidth, BAND.strength * amp, MAX_DISPLACEMENT * amp);
+  gl.uniform4fv(u('uVortex[0]'), packVortices(VORTICES.map((v) => ({ ...v, strength: v.strength * amp }))));
   gl.uniform4fv(u('uHalo[0]'), packVortices(HALOS));
   const starLoc = u('uStar[0]');
   // 静止時(reduced-motion を含む)は明るさの増減を 0 にして、元の絵のままにする
@@ -158,6 +180,7 @@ async function setup(): Promise<void> {
   gl.uniform4fv(starLoc, packStillStars(starBuf));
   const phaseLoc = u('uPhase');
   const uvLoc = gl.getUniformLocation(program, 'uUvRect');
+  const bgLoc = gl.getUniformLocation(program, 'uBgRect');
 
   const draw = (g: GL): void => {
     const dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
@@ -168,8 +191,12 @@ async function setup(): Promise<void> {
       canvas.height = h;
     }
     g.viewport(0, 0, w, h);
-    const r = coverUvRect({ width: w, height: h }, { width: tex.width, height: tex.height });
+    const screen = { width: w, height: h };
+    const image = { width: tex.width, height: tex.height };
+    const r = containUvRect(screen, image);
     g.uniform4f(uvLoc, r.u0, r.v0, r.u1, r.v1);
+    const b = coverUvRect(screen, image);
+    g.uniform4f(bgLoc, b.u0, b.v0, b.u1, b.v1);
     g.drawArrays(g.TRIANGLE_STRIP, 0, 4);
   };
 
