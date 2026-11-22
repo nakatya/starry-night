@@ -39,6 +39,25 @@ export function coverUvRect(screen: Size, image: Size, focus: Point = FOCUS): Uv
   return { u0, v0, u1: u0 + w, v1: v0 + h };
 }
 
+/**
+ * coverUvRect と同じ表示範囲になる CSS の background-position(%)を返す。
+ * CSS の p% は「はみ出し量 × p」だけ左上へずらすので、p = 開始位置 / (1 - 表示幅) になる。
+ * はみ出しがない軸は位置が効かないので 0 を返す。
+ */
+export function coverBackgroundPosition(
+  screen: Size,
+  image: Size,
+  focus: Point = FOCUS,
+): { x: number; y: number } {
+  const r = coverUvRect(screen, image, focus);
+  const w = r.u1 - r.u0;
+  const h = r.v1 - r.v0;
+  return {
+    x: w >= 1 - 1e-9 ? 0 : (r.u0 / (1 - w)) * 100,
+    y: h >= 1 - 1e-9 ? 0 : (r.v0 / (1 - h)) * 100,
+  };
+}
+
 function clamp(x: number, min: number, max: number): number {
   return Math.min(Math.max(x, min), max);
 }
