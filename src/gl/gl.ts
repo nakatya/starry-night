@@ -28,14 +28,26 @@ export function compileShader(gl: GL, type: number, source: string): WebGLShader
 export function createProgram(gl: GL, vertexSrc: string, fragmentSrc: string): WebGLProgram | null {
   const vs = compileShader(gl, gl.VERTEX_SHADER, vertexSrc);
   const fs = compileShader(gl, gl.FRAGMENT_SHADER, fragmentSrc);
-  if (!vs || !fs) return null;
+  if (!vs || !fs) {
+    if (vs) gl.deleteShader(vs);
+    if (fs) gl.deleteShader(fs);
+    return null;
+  }
   const program = gl.createProgram();
-  if (!program) return null;
+  if (!program) {
+    gl.deleteShader(vs);
+    gl.deleteShader(fs);
+    return null;
+  }
   gl.attachShader(program, vs);
   gl.attachShader(program, fs);
   gl.linkProgram(program);
+  // リンク後はシェーダーオブジェクト自体は不要(プログラムが削除されるまで内部で保持される)
+  gl.deleteShader(vs);
+  gl.deleteShader(fs);
   if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
     console.error('プログラムのリンクに失敗:', gl.getProgramInfoLog(program));
+    gl.deleteProgram(program);
     return null;
   }
   return program;
@@ -67,6 +79,12 @@ export function loadImage(url: string): Promise<HTMLImageElement> {
 }
 
 export function createTexture(gl: GL, image: HTMLImageElement): LoadedTexture {
+  const max = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
+  if (image.naturalWidth > max || image.naturalHeight > max) {
+    throw new Error(
+      `画像(${image.naturalWidth}×${image.naturalHeight})が MAX_TEXTURE_SIZE(${max})を超えています`,
+    );
+  }
   const texture = gl.createTexture();
   if (!texture) throw new Error('テクスチャを作れません');
   gl.bindTexture(gl.TEXTURE_2D, texture);

@@ -43,13 +43,16 @@ export const HALOS: readonly Vortex[] = STARS.map((st) => ({
   dir: st.dir,
 }));
 
+/** flow() が足し合わせる渦(空の渦 + 光輪) */
+const ALL_VORTICES: readonly Vortex[] = [...VORTICES, ...HALOS];
+
 export interface Vec2 {
   x: number;
   y: number;
 }
 
 // 渦の速さの形 s*(1-s²)² の最大値(s = 1/√5 のとき)。最大が strength になるよう正規化する
-const PROFILE_PEAK = (1 / Math.sqrt(5)) * 0.8 * 0.8;
+export const PROFILE_PEAK = (1 / Math.sqrt(5)) * 0.8 * 0.8;
 
 /** 中心まわりの接線方向の流れ。半径の外では 0 */
 export function vortexFlow(u: number, v: number, vx: Vortex): Vec2 {
@@ -78,7 +81,7 @@ export function flow(u: number, v: number): Vec2 {
   const b = bandFlow(u, v);
   let x = b.x;
   let y = b.y;
-  for (const vx of [...VORTICES, ...HALOS]) {
+  for (const vx of ALL_VORTICES) {
     const f = vortexFlow(u, v, vx);
     x += f.x;
     y += f.y;

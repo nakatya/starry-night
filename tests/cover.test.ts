@@ -1,6 +1,38 @@
 import { describe, expect, it } from 'vitest';
 import { coverBackgroundPosition, coverUvRect } from '../src/logic/cover';
 
+describe('coverBackgroundPosition(具体値)', () => {
+  const img = { width: 2560, height: 2027 };
+  it('縦長では y が 0、x は 0〜100% に収まる', () => {
+    const p = coverBackgroundPosition({ width: 390, height: 844 }, img);
+    expect(p.y).toBe(0);
+    expect(p.x).toBeGreaterThan(0);
+    expect(p.x).toBeLessThan(100);
+  });
+  it('正方形の画面: 横を切る。フォーカス 0.45 から x を具体値で確認', () => {
+    // 表示幅 w = 2027/2560、u0 = 0.45 - w/2、p = u0 / (1 - w)
+    const w = 2027 / 2560;
+    const p = coverBackgroundPosition({ width: 1000, height: 1000 }, img);
+    expect(p.x).toBeCloseTo(((0.45 - w / 2) / (1 - w)) * 100, 6);
+    expect(p.y).toBe(0);
+  });
+  it('同じ比率なら 0, 0', () => {
+    expect(coverBackgroundPosition({ width: 2560, height: 2027 }, img)).toEqual({ x: 0, y: 0 });
+  });
+  it('極端な縦横比でも 0〜100% に収まる', () => {
+    for (const s of [
+      { width: 10, height: 5000 },
+      { width: 5000, height: 10 },
+    ]) {
+      const p = coverBackgroundPosition(s, img);
+      expect(p.x).toBeGreaterThanOrEqual(0);
+      expect(p.x).toBeLessThanOrEqual(100);
+      expect(p.y).toBeGreaterThanOrEqual(0);
+      expect(p.y).toBeLessThanOrEqual(100);
+    }
+  });
+});
+
 describe('coverBackgroundPosition', () => {
   const imageSize = { width: 2560, height: 2027 };
   const check = (s: { width: number; height: number }) => {
