@@ -26,7 +26,33 @@ function showFallback(): void {
   canvas.classList.add('ready');
 }
 
+let contextLost = false;
+let imagePromise: Promise<HTMLImageElement> | null = null;
+
 async function start(): Promise<void> {
+  // コンテキストロスト中は静止画(CSS 背景)を見せ、復帰したら WebGL に戻す
+  canvas.addEventListener('webglcontextlost', (e) => {
+    e.preventDefault();
+    contextLost = true;
+    stopLoop?.();
+    showFallback();
+  });
+  canvas.addEventListener('webglcontextrestored', () => {
+    contextLost = false;
+    setup().catch((err) => {
+      console.error(err);
+      showFallback();
+    });
+  });
+  await setup();
+}
+
+let stopLoop: (() => void) | null = null;
+let listenersBound = false;
+let redraw: () => void = () => {};
+let onUpdate: () => void = () => {};
+
+async function setup(): Promise<void> {
   const gl = createContext(canvas);
   if (!gl) {
     showFallback();
@@ -40,7 +66,9 @@ async function start(): Promise<void> {
   gl.useProgram(program);
   createFullscreenQuad(gl, program, 'aPos');
 
-  const image = await loadImage(IMAGE_URL);
+  imagePromise ??= loadImage(IMAGE_URL);
+  const image = await imagePromise;
+  if (contextLost || gl.isContextLost()) return;
   const tex = createTexture(gl, image);
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, tex.texture);
@@ -128,11 +156,23 @@ async function start(): Promise<void> {
   };
   gl.uniform1f(phaseLoc, 0);
   draw(gl);
-  window.addEventListener('resize', () => draw(gl));
-  window.addEventListener('orientationchange', () => draw(gl));
-  document.addEventListener('visibilitychange', update);
-  motionQuery.addEventListener('change', update);
+  redraw = () => {
+    if (!contextLost) draw(gl);
+  };
+  onUpdate = update;
+  if (!listenersBound) {
+    listenersBound = true;
+    window.addEventListener('resize', () => redraw());
+    window.addEventListener('orientationchange', () => redraw());
+    document.addEventListener('visibilitychange', () => onUpdate());
+    motionQuery.addEventListener('change', () => onUpdate());
+  }
+  stopLoop = () => {
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = 0;
+  };
   update();
+  canvas.style.backgroundImage = '';
   canvas.classList.add('ready');
 }
 

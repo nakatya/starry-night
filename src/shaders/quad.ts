@@ -13,7 +13,11 @@ import { HALOS, VORTICES } from '../logic/flow';
 import { STARS } from '../logic/stars';
 
 export const FRAGMENT_SHADER = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
+#else
+precision mediump float;
+#endif
 varying vec2 vUv;
 uniform sampler2D uImage;
 uniform sampler2D uMask;
