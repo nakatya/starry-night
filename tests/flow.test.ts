@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BAND,
   IMAGE_ASPECT,
   MAX_DISPLACEMENT,
   VORTICES,
@@ -80,7 +81,7 @@ describe('packVortices', () => {
 describe('bandFlow', () => {
   it('帯の中心で最大、遠くでほぼ 0、縦成分は 0', () => {
     const c = bandFlow(0.5, 0.42);
-    expect(c.x).toBeCloseTo(0.0015, 12);
+    expect(c.x).toBeCloseTo(BAND.strength, 12);
     expect(c.y).toBe(0);
     expect(bandFlow(0.5, 0.99).x).toBeLessThan(1e-6);
   });
