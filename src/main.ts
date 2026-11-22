@@ -51,7 +51,9 @@ async function start(): Promise<void> {
   gl.uniform1i(gl.getUniformLocation(program, 'uMask'), 1);
   const debugMask = new URLSearchParams(location.search).get('debug') === 'mask';
   gl.uniform1f(gl.getUniformLocation(program, 'uDebugMask'), debugMask ? 1 : 0);
+  // マスク作成時の bindTexture でユニット 0 が上書きされるため、絵のテクスチャを結び直す
   gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, tex.texture);
   const params = new URLSearchParams(location.search);
   const speedParam = Number(params.get('speed') ?? 1);
   const speed = Number.isFinite(speedParam) && speedParam >= 0 ? speedParam : 1;
