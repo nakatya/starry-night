@@ -62,3 +62,12 @@ describe('境界の回帰', () => {
     expect(pointInPolygon(0.5, -0.1, square)).toBe(false);
   });
 });
+
+describe('尖塔', () => {
+  it('先端と軸は 0、左右の空は 1', () => {
+    expect(maskAt(0.564, 0.645)).toBe(0);
+    expect(maskAt(0.565, 0.7)).toBe(0);
+    expect(maskAt(0.53, 0.645)).toBe(1);
+    expect(maskAt(0.6, 0.62)).toBe(1);
+  });
+});
