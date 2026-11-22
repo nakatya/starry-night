@@ -9,7 +9,7 @@ void main() {
 }
 `;
 
-import { HALOS, VORTICES } from '../logic/flow';
+import { HALOS, PROFILE_PEAK, VORTICES } from '../logic/flow';
 import { STARS } from '../logic/stars';
 
 export const FRAGMENT_SHADER = `
@@ -29,7 +29,7 @@ uniform vec4 uVortex[${VORTICES.length}]; // 中心 xy, 半径, 向き付きの�
 uniform vec4 uHalo[${HALOS.length}];
 uniform vec4 uStar[${STARS.length}]; // 中心 xy, 光輪の半径, 明るさの倍率 - 1
 
-const float PROFILE_PEAK = 0.2862; // s*(1-s^2)^2 の最大値
+const float PROFILE_PEAK = ${PROFILE_PEAK.toFixed(6)}; // s*(1-s^2)^2 の最大値
 
 vec2 vortexFlow(vec2 uv, vec4 vx) {
   vec2 d = vec2(uv.x - vx.x, (uv.y - vx.y) / uAspect);

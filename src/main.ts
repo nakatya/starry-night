@@ -17,12 +17,21 @@ const IMAGE_URL = `${import.meta.env.BASE_URL}starry-night.jpg`;
 const MAX_DPR = 2;
 const MASK_W = 768;
 const MASK_H = 608;
+const MAX_SPEED = 10;
+
+/** 静止状態の星バッファ(明るさの増減だけ 0 にして元の絵のまま。半径は 0 除算を避けるため残す) */
+function packStillStars(out: Float32Array<ArrayBuffer>): Float32Array<ArrayBuffer> {
+  packStarGlow(0, out);
+  for (let i = 3; i < out.length; i += 4) out[i] = 0;
+  return out;
+}
 
 const canvas = document.getElementById('stage') as HTMLCanvasElement;
 
 let fallbackActive = false;
 let fallbackImage: HTMLImageElement | null = null;
 let fallbackResizeBound = false;
+let fallbackRetryBound = false;
 
 function updateFallbackPosition(): void {
   if (!fallbackActive || !fallbackImage) return;
@@ -40,9 +49,9 @@ function showFallback(): void {
   if (!fallbackResizeBound) {
     fallbackResizeBound = true;
     window.addEventListener('resize', updateFallbackPosition);
-    window.addEventListener('orientationchange', updateFallbackPosition);
   }
-  loadImage(IMAGE_URL)
+  imagePromise ??= loadImage(IMAGE_URL); // WebGL 経路と同じ読み込みを使い回す
+  imagePromise
     .then((img) => {
       if (!fallbackActive) return; // WebGL に復帰済み
       fallbackImage = img;
@@ -50,7 +59,21 @@ function showFallback(): void {
       updateFallbackPosition();
       canvas.classList.add('ready');
     })
-    .catch((err) => console.error(err));
+    .catch((err) => {
+      console.error(err);
+      imagePromise = null;
+      // 読み込みに失敗したら、回線の復帰(online)か、タブが見えるようになったとき 1 回だけ再試行する
+      if (fallbackRetryBound) return;
+      fallbackRetryBound = true;
+      const retry = (): void => {
+        if (document.hidden) return;
+        window.removeEventListener('online', retry);
+        document.removeEventListener('visibilitychange', retry);
+        if (fallbackActive) showFallback();
+      };
+      window.addEventListener('online', retry);
+      document.addEventListener('visibilitychange', retry);
+    });
 }
 
 let contextLost = false;
@@ -116,25 +139,23 @@ async function setup(): Promise<void> {
   gl.activeTexture(gl.TEXTURE1);
   gl.bindTexture(gl.TEXTURE_2D, maskTex);
   gl.uniform1i(gl.getUniformLocation(program, 'uMask'), 1);
-  const debugMask = new URLSearchParams(location.search).get('debug') === 'mask';
+  const params = new URLSearchParams(location.search);
+  const debugMask = params.get('debug') === 'mask';
   gl.uniform1f(gl.getUniformLocation(program, 'uDebugMask'), debugMask ? 1 : 0);
   // マスク作成時の bindTexture でユニット 0 が上書きされるため、絵のテクスチャを結び直す
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, tex.texture);
-  const params = new URLSearchParams(location.search);
   const speedParam = Number(params.get('speed') ?? 1);
-  const speed = Number.isFinite(speedParam) && speedParam >= 0 ? speedParam : 1;
+  const speed = Number.isFinite(speedParam) && speedParam >= 0 ? Math.min(speedParam, MAX_SPEED) : 1;
   const u = (name: string) => gl.getUniformLocation(program, name);
   gl.uniform1f(u('uAspect'), IMAGE_ASPECT);
   gl.uniform4f(u('uBand'), BAND.centerV, BAND.halfWidth, BAND.strength, MAX_DISPLACEMENT);
   gl.uniform4fv(u('uVortex[0]'), packVortices(VORTICES));
   gl.uniform4fv(u('uHalo[0]'), packVortices(HALOS));
   const starLoc = u('uStar[0]');
-  // 静止時(reduced-motion を含む)は明るさの増減だけ 0 にして、元の絵のままにする。半径は 0 除算を避けるため残す
+  // 静止時(reduced-motion を含む)は明るさの増減を 0 にして、元の絵のままにする
   const starBuf = new Float32Array(STARS.length * 4);
-  packStarGlow(0, starBuf);
-  for (let i = 3; i < starBuf.length; i += 4) starBuf[i] = 0;
-  gl.uniform4fv(starLoc, starBuf);
+  gl.uniform4fv(starLoc, packStillStars(starBuf));
   const phaseLoc = u('uPhase');
   const uvLoc = gl.getUniformLocation(program, 'uUvRect');
 
@@ -176,9 +197,7 @@ async function setup(): Promise<void> {
   const stillFrame = (): void => {
     // 静止した絵(動き 0、光輪の増減 0)
     gl.uniform1f(phaseLoc, 0);
-    packStarGlow(0, starBuf);
-    for (let i = 3; i < starBuf.length; i += 4) starBuf[i] = 0;
-    gl.uniform4fv(starLoc, starBuf);
+    gl.uniform4fv(starLoc, packStillStars(starBuf));
     draw(gl);
   };
   const update = (): void => {
@@ -201,8 +220,11 @@ async function setup(): Promise<void> {
   if (!listenersBound) {
     listenersBound = true;
     window.addEventListener('resize', () => redraw());
-    window.addEventListener('orientationchange', () => redraw());
-    document.addEventListener('visibilitychange', () => onUpdate());
+    // 向きの変化は resize に含まれるので orientationchange は不要
+    // reduced-motion 中は表示/非表示で何も変わらないので、静止画の描き直しは change のときだけ行う
+    document.addEventListener('visibilitychange', () => {
+      if (!motionQuery.matches) onUpdate();
+    });
     motionQuery.addEventListener('change', () => onUpdate());
   }
   stopLoop?.(); // 前のループが残っていれば必ず止めてから新しいループに切り替える

@@ -3,7 +3,10 @@ import {
   IMAGE_ASPECT,
   MAX_DISPLACEMENT,
   VORTICES,
+  PROFILE_PEAK,
+  bandFlow,
   flow,
+  packVortices,
   vortexFlow,
   type Vortex,
 } from '../src/logic/flow';
@@ -62,5 +65,31 @@ describe('flow', () => {
   it('渦・光輪・帯から離れた場所ではほぼ 0', () => {
     const f = flow(0.99, 0.99);
     expect(Math.hypot(f.x, f.y)).toBeLessThan(1e-6);
+  });
+});
+
+describe('packVortices', () => {
+  it('長さが list.length * 4 で、dir = -1 なら強さが負', () => {
+    const out = packVortices([isolated, { ...isolated, dir: -1 }]);
+    expect(out.length).toBe(8);
+    expect(out[3]).toBeGreaterThan(0);
+    expect(out[7]).toBeLessThan(0);
+  });
+});
+
+describe('bandFlow', () => {
+  it('帯の中心で最大、遠くでほぼ 0、縦成分は 0', () => {
+    const c = bandFlow(0.5, 0.42);
+    expect(c.x).toBeCloseTo(0.0015, 12);
+    expect(c.y).toBe(0);
+    expect(bandFlow(0.5, 0.99).x).toBeLessThan(1e-6);
+  });
+});
+
+describe('PROFILE_PEAK', () => {
+  it('渦の速さの形 s(1-s²)² の最大値', () => {
+    let max = 0;
+    for (let s = 0; s <= 1; s += 0.0001) max = Math.max(max, s * (1 - s * s) ** 2);
+    expect(PROFILE_PEAK).toBeCloseTo(max, 6);
   });
 });
