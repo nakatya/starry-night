@@ -10,6 +10,7 @@ void main() {
 `;
 
 import { HALOS, VORTICES } from '../logic/flow';
+import { STARS } from '../logic/stars';
 
 export const FRAGMENT_SHADER = `
 precision highp float;
@@ -22,6 +23,7 @@ uniform float uAspect; // 絵の 幅 / 高さ
 uniform vec4 uBand; // 帯の中心 v, 半幅, 強さ, 最大のずれ
 uniform vec4 uVortex[${VORTICES.length}]; // 中心 xy, 半径, 向き付きの強さ
 uniform vec4 uHalo[${HALOS.length}];
+uniform vec4 uStar[${STARS.length}]; // 中心 xy, 光輪の半径, 明るさの倍率 - 1
 
 const float PROFILE_PEAK = 0.2862; // s*(1-s^2)^2 の最大値
 
@@ -57,6 +59,15 @@ void main() {
   vec3 c0 = texture2D(uImage, vUv - f * (p0 - 0.5) * 2.0).rgb;
   vec3 c1 = texture2D(uImage, vUv - f * (p1 - 0.5) * 2.0).rgb;
   vec3 c = mix(c1, c0, w0);
+  // 星と月の光輪: 中心ほど強く、半径の外では 0 の重みで明るさを増減する。白飛びさせない
+  float glow = 0.0;
+  for (int i = 0; i < ${STARS.length}; i++) {
+    vec2 d = vec2(vUv.x - uStar[i].x, (vUv.y - uStar[i].y) / uAspect);
+    float s = clamp(length(d) / uStar[i].z, 0.0, 1.0);
+    float w = (1.0 - s * s) * (1.0 - s * s);
+    glow += w * uStar[i].w;
+  }
+  c = min(c * (1.0 + glow), vec3(1.0));
   if (uDebugMask > 0.5) {
     c = mix(c, vec3(m), 0.85);
   }

@@ -1,4 +1,5 @@
 import type { Point } from './cover';
+import { STARS } from './stars';
 
 /**
  * 空の流れ場。座標(u, v)は絵の割合(左上 0,0、右下 1,1)。
@@ -34,21 +35,13 @@ export const VORTICES: readonly Vortex[] = [
 /** 空全体の流れ: 中央を左から右へ横切る波の帯 */
 export const BAND = { centerV: 0.42, halfWidth: 0.16, strength: 0.0015 };
 
-/** 月と星(光輪)。ごく弱い回転 */
-export const HALOS: readonly Vortex[] = [
-  { center: { x: 0.906, y: 0.19 }, radius: 0.1, strength: 0.0008, dir: 1 },
-  { center: { x: 0.11, y: 0.043 }, radius: 0.045, strength: 0.0005, dir: 1 },
-  { center: { x: 0.229, y: 0.032 }, radius: 0.035, strength: 0.0005, dir: -1 },
-  { center: { x: 0.344, y: 0.038 }, radius: 0.04, strength: 0.0005, dir: 1 },
-  { center: { x: 0.411, y: 0.066 }, radius: 0.035, strength: 0.0005, dir: -1 },
-  { center: { x: 0.609, y: 0.082 }, radius: 0.05, strength: 0.0005, dir: 1 },
-  { center: { x: 0.237, y: 0.172 }, radius: 0.045, strength: 0.0005, dir: -1 },
-  { center: { x: 0.698, y: 0.23 }, radius: 0.05, strength: 0.0005, dir: 1 },
-  { center: { x: 0.326, y: 0.326 }, radius: 0.035, strength: 0.0005, dir: -1 },
-  { center: { x: 0.049, y: 0.451 }, radius: 0.03, strength: 0.0005, dir: 1 },
-  { center: { x: 0.134, y: 0.477 }, radius: 0.04, strength: 0.0005, dir: -1 },
-  { center: { x: 0.357, y: 0.526 }, radius: 0.06, strength: 0.0005, dir: 1 },
-];
+/** 月と星(光輪)のまわりのごく弱い回転。位置は stars.ts と共通 */
+export const HALOS: readonly Vortex[] = STARS.map((st) => ({
+  center: st.center,
+  radius: st.radius,
+  strength: st.spin,
+  dir: st.dir,
+}));
 
 export interface Vec2 {
   x: number;
