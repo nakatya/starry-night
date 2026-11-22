@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { coverBackgroundPosition, coverUvRect } from '../src/logic/cover';
+import { containUvRect, coverBackgroundPosition, coverUvRect } from '../src/logic/cover';
 
 describe('coverBackgroundPosition(具体値)', () => {
   const img = { width: 2560, height: 2027 };
@@ -123,5 +123,36 @@ describe('coverUvRect', () => {
     expect(0.47).toBeLessThan(r.u1);
     expect(0.33).toBeGreaterThan(r.v0);
     expect(0.33).toBeLessThan(r.v1);
+  });
+});
+
+describe('containUvRect', () => {
+  const img = { width: 1920, height: 1520 };
+  it('絵の全体(0〜1)が必ず範囲に含まれ、中央に置かれる', () => {
+    for (const s of [
+      { width: 390, height: 844 },
+      { width: 1920, height: 1080 },
+      { width: 1000, height: 1000 },
+      { width: 3440, height: 1440 },
+    ]) {
+      const r = containUvRect(s, img);
+      expect(r.u0).toBeLessThanOrEqual(1e-9);
+      expect(r.v0).toBeLessThanOrEqual(1e-9);
+      expect(r.u1).toBeGreaterThanOrEqual(1 - 1e-9);
+      expect(r.v1).toBeGreaterThanOrEqual(1 - 1e-9);
+      expect((r.u0 + r.u1) / 2).toBeCloseTo(0.5, 12);
+      expect((r.v0 + r.v1) / 2).toBeCloseTo(0.5, 12);
+    }
+  });
+
+  it('範囲の縦横比が画面の縦横比と一致する(絵が歪まない)', () => {
+    const s = { width: 390, height: 844 };
+    const r = containUvRect(s, img);
+    const aspect = ((r.u1 - r.u0) * img.width) / ((r.v1 - r.v0) * img.height);
+    expect(aspect).toBeCloseTo(s.width / s.height, 10);
+  });
+
+  it('絵と同じ縦横比の画面ではちょうど 0〜1', () => {
+    expect(containUvRect({ width: 960, height: 760 }, img)).toEqual({ u0: 0, v0: 0, u1: 1, v1: 1 });
   });
 });

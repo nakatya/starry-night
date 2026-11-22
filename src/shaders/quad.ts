@@ -1,10 +1,13 @@
 export const VERTEX_SHADER = `
 attribute vec2 aPos;
-varying vec2 vUv;
-uniform vec4 uUvRect; // u0, v0, u1, v1(左上原点)
+varying vec2 vUv; // 絵の全体が収まる範囲(contain)。0〜1 の外は背景
+varying vec2 vBg; // 背景用に画面を覆う範囲(cover)
+uniform vec4 uUvRect; // contain: u0, v0, u1, v1(左上原点)
+uniform vec4 uBgRect; // cover: u0, v0, u1, v1(左上原点)
 void main() {
   vec2 p = aPos * 0.5 + 0.5; // 0..1、左下原点
   vUv = vec2(mix(uUvRect.x, uUvRect.z, p.x), mix(uUvRect.w, uUvRect.y, p.y));
+  vBg = vec2(mix(uBgRect.x, uBgRect.z, p.x), mix(uBgRect.w, uBgRect.y, p.y));
   gl_Position = vec4(aPos, 0.0, 1.0);
 }
 `;
@@ -19,8 +22,10 @@ precision highp float;
 precision mediump float;
 #endif
 varying vec2 vUv;
+varying vec2 vBg;
 uniform sampler2D uImage;
 uniform sampler2D uMask;
+uniform sampler2D uBlur; // 余白用に絵を小さく縮めたもの
 uniform float uDebugMask; // 1 のときマスクを白黒で重ねる
 uniform float uPhase; // 0..1(1周期で一周)
 uniform float uAspect; // 絵の 幅 / 高さ
@@ -52,7 +57,17 @@ vec2 flowAt(vec2 uv) {
   return f;
 }
 
+// 絵の外側の余白: 画面を覆うように拡大した絵を、ぼかして暗くして敷く。
+// uBlur は絵を小さく縮めたテクスチャ。線形補間で引き伸ばすだけで、なめらかにぼける
+vec3 background() {
+  return texture2D(uBlur, vBg).rgb * 0.3;
+}
+
 void main() {
+  if (vUv.x < 0.0 || vUv.x > 1.0 || vUv.y < 0.0 || vUv.y > 1.0) {
+    gl_FragColor = vec4(background(), 1.0);
+    return;
+  }
   float m = texture2D(uMask, vUv).r;
   vec2 f = flowAt(vUv) * m; // マスク 0 では動かさない
   f.y *= uAspect; // UV へ
