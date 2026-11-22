@@ -9,6 +9,7 @@ import {
   type GL,
 } from './gl/gl';
 import { BAND, HALOS, IMAGE_ASPECT, MAX_DISPLACEMENT, PERIOD_SECONDS, VORTICES, packVortices } from './logic/flow';
+import { STARS, packStarGlow } from './logic/stars';
 import { buildMask } from './logic/mask';
 import { FRAGMENT_SHADER, VERTEX_SHADER } from './shaders/quad';
 
@@ -62,6 +63,12 @@ async function start(): Promise<void> {
   gl.uniform4f(u('uBand'), BAND.centerV, BAND.halfWidth, BAND.strength, MAX_DISPLACEMENT);
   gl.uniform4fv(u('uVortex[0]'), packVortices(VORTICES));
   gl.uniform4fv(u('uHalo[0]'), packVortices(HALOS));
+  const starLoc = u('uStar[0]');
+  // 静止時(reduced-motion を含む)は明るさの増減だけ 0 にして、元の絵のままにする。半径は 0 除算を避けるため残す
+  const starBuf = new Float32Array(STARS.length * 4);
+  packStarGlow(0, starBuf);
+  for (let i = 3; i < starBuf.length; i += 4) starBuf[i] = 0;
+  gl.uniform4fv(starLoc, starBuf);
   const phaseLoc = u('uPhase');
   const uvLoc = gl.getUniformLocation(program, 'uUvRect');
 
@@ -82,12 +89,15 @@ async function start(): Promise<void> {
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   let phase = 0;
   let last = 0;
+  let time = 0;
   const frame = (now: number): void => {
     if (!document.hidden) {
       // 非表示から戻ったときに飛ばないよう、1フレームの進みに上限を設ける
       const dt = last ? Math.min((now - last) / 1000, 0.1) : 0;
+      time += dt * speed;
       phase = (phase + (dt * speed) / PERIOD_SECONDS) % 1;
       gl.uniform1f(phaseLoc, phase);
+      gl.uniform4fv(starLoc, packStarGlow(time, starBuf));
       draw(gl);
     }
     last = document.hidden ? 0 : now;
