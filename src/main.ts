@@ -17,6 +17,7 @@ const IMAGE_URL = `${import.meta.env.BASE_URL}starry-night.jpg`;
 const MAX_DPR = 2;
 const MASK_W = 768;
 const MASK_H = 608;
+let maskData: Uint8Array | null = null;
 const MAX_SPEED = 10;
 const MAX_AMP = 3;
 
@@ -135,6 +136,8 @@ async function setup(): Promise<void> {
   createFullscreenQuad(gl, program, 'aPos');
 
   imagePromise ??= loadImage(IMAGE_URL);
+  // 画像のダウンロードと並行してマスクを作る(一度作ったら復帰時にも使い回す)
+  maskData ??= buildMask(MASK_W, MASK_H);
   let image: HTMLImageElement;
   try {
     image = await imagePromise;
@@ -149,7 +152,7 @@ async function setup(): Promise<void> {
   gl.bindTexture(gl.TEXTURE_2D, tex.texture);
   gl.uniform1i(gl.getUniformLocation(program, 'uImage'), 0);
   // マスクは起動時に一度だけ作る
-  const maskTex = createMaskTexture(gl, buildMask(MASK_W, MASK_H), MASK_W, MASK_H);
+  const maskTex = createMaskTexture(gl, maskData, MASK_W, MASK_H);
   gl.activeTexture(gl.TEXTURE1);
   gl.bindTexture(gl.TEXTURE_2D, maskTex);
   gl.uniform1i(gl.getUniformLocation(program, 'uMask'), 1);

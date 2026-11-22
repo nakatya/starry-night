@@ -11,8 +11,8 @@ export const HORIZON: readonly Point[] = [
   { x: 0.2, y: 0.74 },
   { x: 0.36, y: 0.75 },
   { x: 0.43, y: 0.68 },
-  { x: 0.5, y: 0.7 },
-  { x: 0.565, y: 0.66 },
+  { x: 0.5, y: 0.715 },
+  { x: 0.565, y: 0.665 },
   { x: 0.65, y: 0.63 },
   { x: 0.73, y: 0.655 },
   { x: 0.78, y: 0.625 },
@@ -51,6 +51,19 @@ export const CYPRESS: readonly Point[] = [
   { x: 0.185, y: 0.07 },
 ];
 
+/** 教会の尖塔(閉じた多角形)。先端は地平線より上に出るため、別に 0 にする */
+export const SPIRE: readonly Point[] = [
+  { x: 0.564, y: 0.62 },
+  { x: 0.5695, y: 0.64 },
+  { x: 0.5705, y: 0.665 },
+  { x: 0.574, y: 0.72 },
+  { x: 0.58, y: 0.8 },
+  { x: 0.55, y: 0.8 },
+  { x: 0.556, y: 0.72 },
+  { x: 0.5585, y: 0.665 },
+  { x: 0.5585, y: 0.64 },
+];
+
 /** 地平線の y(x での線形補間) */
 export function horizonY(x: number): number {
   const h = HORIZON;
@@ -80,6 +93,7 @@ export function pointInPolygon(x: number, y: number, poly: readonly Point[]): bo
 export function maskAt(x: number, y: number): 0 | 1 {
   if (y >= horizonY(x)) return 0;
   if (pointInPolygon(x, y, CYPRESS)) return 0;
+  if (pointInPolygon(x, y, SPIRE)) return 0;
   return 1;
 }
 
@@ -113,9 +127,15 @@ export function boxBlur(src: Uint8Array, width: number, height: number, radius: 
 /** マスクを width×height の 0〜255 の配列として作る(起動時に一度だけ呼ぶ) */
 export function buildMask(width: number, height: number, blurRadius = 2): Uint8Array {
   const raw = new Uint8Array(width * height);
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      raw[y * width + x] = maskAt((x + 0.5) / width, (y + 0.5) / height) * 255;
+  for (let x = 0; x < width; x++) {
+    const u = (x + 0.5) / width;
+    const horizon = horizonY(u); // 列ごとに 1 回だけ
+    // 地平線より下の行は 0 のまま(配列の初期値)なので、そこで打ち切る
+    for (let y = 0; y < height; y++) {
+      const v = (y + 0.5) / height;
+      if (v >= horizon) break;
+      if (pointInPolygon(u, v, CYPRESS) || pointInPolygon(u, v, SPIRE)) continue;
+      raw[y * width + x] = 255;
     }
   }
   return boxBlur(raw, width, height, blurRadius);
